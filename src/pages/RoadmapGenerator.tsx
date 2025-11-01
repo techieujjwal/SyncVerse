@@ -4,62 +4,39 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
   Sparkles,
   Loader2,
-  CheckCircle2,
-  Users,
-  Mail,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-const dummyPeers = [
-    { id: 1, name: "Priya Sharma",     city: "Mumbai",      email: "priya.sharma@email.com",      lastActive: "5 days ago",  topic: "machine learning" },
-  { id: 2, name: "Rohan Mehta",      city: "Delhi",       email: "rohan.mehta@email.com",       lastActive: "2 days ago",  topic: "data science" },
-  { id: 3, name: "Ananya Verma",     city: "Bangalore",   email: "ananya.verma@email.com",     lastActive: "1 day ago",   topic: "machine learning" },
-  { id: 4, name: "Karan Patel",      city: "Pune",        email: "karan.patel@email.com",      lastActive: "3 hours ago", topic: "web development" },
-  
-  { id: 5,  name: "Simran Kaur",     city: "Chennai",     email: "simran.kaur@email.com",      lastActive: "12 hours ago", topic: "DevOps engineering" },
-  { id: 6,  name: "Amit Gupta",      city: "Hyderabad",   email: "amit.gupta@email.com",        lastActive: "4 days ago",   topic: "full-stack development" },
-  { id: 7,  name: "Neha Reddy",      city: "Bangalore",   email: "neha.reddy@email.com",        lastActive: "6 days ago",   topic: "frontend engineering" },
-  { id: 8,  name: "Vikram Singh",    city: "Kolkata",     email: "vikram.singh@email.com",      lastActive: "8 hours ago",   topic: "backend engineering" },
-  { id: 9,  name: "Maya Nair",        city: "Mumbai",      email: "maya.nair@email.com",          lastActive: "1 day ago",    topic: "cloud engineering" },
-  { id: 10, name: "Rakesh Iyer",     city: "Delhi",       email: "rakesh.iyer@email.com",        lastActive: "10 hours ago",  topic: "data engineering" },
-  { id: 11, name: "Priyanka Das",    city: "Pune",        email: "priyanka.das@email.com",       lastActive: "3 days ago",    topic: "QA engineering" },
-  { id: 12, name: "Siddharth Rao",   city: "Hyderabad",   email: "siddharth.rao@email.com",      lastActive: "5 hours ago",   topic: "mobile development" },
-  { id: 13, name: "Tina Chawla",     city: "Chennai",     email: "tina.chawla@email.com",         lastActive: "2 days ago",    topic: "UX engineering" },
-  { id: 14, name: "Varun Mehta",     city: "Bangalore",   email: "varun.mehta@email.com",         lastActive: "7 hours ago",   topic: "site reliability engineering" },
-  { id: 15, name: "Anil Kapoor",     city: "Mumbai",      email: "anil.kapoor@email.com",         lastActive: "9 days ago",     topic: "database administration" },
-  { id: 16, name: "Deepa Joshi",     city: "Kolkata",     email: "deepa.joshi@email.com",         lastActive: "11 hours ago",  topic: "backend microservices" },
-  { id: 17, name: "Gaurav Pandey",   city: "Delhi",       email: "gaurav.pandey@email.com",       lastActive: "14 hours ago",  topic: "API development" },
-  { id: 18, name: "Richa Sharma",    city: "Pune",        email: "richa.sharma@email.com",        lastActive: "2 days ago",     topic: "frontend frameworks" },
-  { id: 19, name: "Kunal Agarwal",   city: "Hyderabad",   email: "kunal.agarwal@email.com",       lastActive: "4 hours ago",    topic: "infrastructure as code" },
-];
-
 const RoadmapGenerator = () => {
   const [topic, setTopic] = useState("");
   const [currentKnowledge, setCurrentKnowledge] = useState("");
-  const [roadmap, setRoadmap] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [matchedPeers, setMatchedPeers] = useState([]);
+  const [parsedRoadmap, setParsedRoadmap] = useState([]);
+  const [progress, setProgress] = useState(0);
+  const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
 
-  const normalize = (text) =>
-    text.toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem("roadmapProgress"));
+    if (saved) setParsedRoadmap(saved);
+  }, []);
 
   useEffect(() => {
-    if (!topic.trim()) {
-      setMatchedPeers([]);
-      return;
+    if (parsedRoadmap.length > 0) {
+      localStorage.setItem("roadmapProgress", JSON.stringify(parsedRoadmap));
+      const completed = parsedRoadmap.filter((w) => w.completed).length;
+      setProgress((completed / parsedRoadmap.length) * 100);
     }
-    const peers = dummyPeers.filter((peer) =>
-      normalize(peer.topic).includes(normalize(topic))
-    );
-    setMatchedPeers(peers);
-  }, [topic]);
+  }, [parsedRoadmap]);
 
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -72,7 +49,7 @@ const RoadmapGenerator = () => {
     }
 
     setIsLoading(true);
-    setRoadmap("");
+    setParsedRoadmap([]);
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-roadmap", {
@@ -89,10 +66,11 @@ const RoadmapGenerator = () => {
         return;
       }
 
-      setRoadmap(data.roadmap);
+      const extracted = parseWeeks(data.roadmap);
+      setParsedRoadmap(extracted);
       toast({
         title: "Success!",
-        description: "Your personalized roadmap is ready",
+        description: "Detailed roadmap generated successfully 🚀",
       });
     } catch (error) {
       console.error("Error generating roadmap:", error);
@@ -106,108 +84,89 @@ const RoadmapGenerator = () => {
     }
   };
 
-  // ✅ NEW: Trigger on Enter key press
+  // Improved week parser that captures detailed weekly info
+  const parseWeeks = (text) => {
+    const lines = text.split("\n");
+    const weeks = [];
+    let currentWeek = null;
+
+    lines.forEach((line) => {
+      const weekMatch = line.match(/week\s*(\d+):?\s*(.*)/i);
+      if (weekMatch) {
+        if (currentWeek) weeks.push(currentWeek);
+        currentWeek = {
+          week: weekMatch[1],
+          title: weekMatch[2] || "Untitled",
+          details: [],
+          completed: false,
+          projectLink: "",
+        };
+      } else if (currentWeek && line.trim() !== "") {
+        currentWeek.details.push(line.trim());
+      }
+    });
+
+    if (currentWeek) weeks.push(currentWeek);
+    return weeks;
+  };
+
+  const toggleWeekCompletion = (index) => {
+    setParsedRoadmap((prev) =>
+      prev.map((w, i) => (i === index ? { ...w, completed: !w.completed } : w))
+    );
+  };
+
+  const handleProjectLinkChange = (index, value) => {
+    setParsedRoadmap((prev) =>
+      prev.map((w, i) => (i === index ? { ...w, projectLink: value } : w))
+    );
+  };
+
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !isLoading) {
-      e.preventDefault(); // prevent accidental form submission
+      e.preventDefault();
       handleGenerate();
     }
   };
 
-  const formatRoadmap = (text) => {
-    if (!text) return null;
-    const lines = text.split("\n").filter((line) => line.trim() !== "");
-
-    return lines.map((line, index) => {
-      const withLinks = line.replace(
-        /(https?:\/\/[^\s]+)/g,
-        (url) =>
-          `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-primary underline hover:text-primary/80">${url}</a>`
-      );
-
-      if (/month\s*\d+/i.test(line)) {
-        return (
-          <h3
-            key={index}
-            className="text-2xl font-semibold mt-6 mb-3 text-primary border-b border-border pb-1"
-            dangerouslySetInnerHTML={{ __html: withLinks }}
-          />
-        );
-      }
-
-      if (/^[-*•]/.test(line.trim())) {
-        return (
-          <li
-            key={index}
-            className="leading-relaxed text-muted-foreground ml-4"
-            dangerouslySetInnerHTML={{
-              __html: withLinks.replace(/^[-*•]\s*/, ""),
-            }}
-          />
-        );
-      }
-
-      return (
-        <p
-          key={index}
-          className="leading-relaxed text-muted-foreground"
-          dangerouslySetInnerHTML={{ __html: withLinks }}
-        />
-      );
-    });
-  };
-
   return (
-    <div className="min-h-screen pt-24 pb-12 px-4">
-      <div className="container mx-auto max-w-4xl">
+    <div className="min-h-screen pt-24 pb-12 px-4 bg-background">
+      <div className="container mx-auto max-w-5xl">
         <Link
           to="/"
-          className="text-sm text-muted-foreground hover:text-primary mb-6 inline-flex items-center gap-2 animate-fade-in"
+          className="text-sm text-muted-foreground hover:text-primary mb-6 inline-flex items-center gap-2"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Home
+          <ArrowLeft className="h-4 w-4" /> Back to Home
         </Link>
 
-        <div className="mb-8 animate-fade-in">
-          <h1 className="text-5xl font-bold mb-4">
-            AI-Powered <span className="text-gradient">Roadmap Generator</span>
-          </h1>
-          <p className="text-xl text-muted-foreground">
-            Get a structured, multi-month learning plan tailored to your goals - also get connected with peers on the same path!
-          </p>
-        </div>
+        <h1 className="text-5xl font-bold mb-4">
+          AI-Powered <span className="text-gradient">Roadmap Tracker</span>
+        </h1>
+        <p className="text-xl text-muted-foreground mb-6">
+          Generate a roadmap and track your weekly progress.
+        </p>
 
         {/* Input Section */}
-        <Card className="p-8 border-border bg-card card-glow mb-8 animate-fade-in">
+        <Card className="p-8 border-border bg-card mb-8">
           <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="topic" className="text-base">
-                What do you want to learn?
-              </Label>
+            <div>
+              <Label>What do you want to learn?</Label>
               <Input
-                id="topic"
-                placeholder="e.g., Full Stack Web Development, Machine Learning..."
+                placeholder="e.g. Frontend Development, Machine Learning..."
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                onKeyDown={handleKeyPress} // ✅ Enter triggers roadmap
-                className="bg-background/50 border-border"
+                onKeyDown={handleKeyPress}
               />
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="knowledge" className="text-base">
-                What do you already know? (Optional)
-              </Label>
+            <div>
+              <Label>Your current knowledge (optional)</Label>
               <Textarea
-                id="knowledge"
-                placeholder="e.g., I know HTML/CSS basics and some JS..."
+                placeholder="e.g. I know HTML/CSS basics..."
                 value={currentKnowledge}
                 onChange={(e) => setCurrentKnowledge(e.target.value)}
-                onKeyDown={handleKeyPress} // ✅ Enter triggers roadmap here too
-                className="bg-background/50 border-border min-h-[120px]"
+                onKeyDown={handleKeyPress}
               />
             </div>
-
             <Button
               onClick={handleGenerate}
               disabled={isLoading}
@@ -216,73 +175,79 @@ const RoadmapGenerator = () => {
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating Your Roadmap...
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...
                 </>
               ) : (
                 <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Roadmap
+                  <Sparkles className="h-4 w-4 mr-2" /> Generate Roadmap
                 </>
               )}
             </Button>
           </div>
         </Card>
 
-        {/* Peer Up Section */}
-        {matchedPeers.length > 0 && (
-          <Card className="p-8 border-border bg-card card-glow mb-8 animate-fade-in">
-            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-primary">
-              <Users className="h-5 w-5" /> Peers Learning {topic}
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              {matchedPeers.length} learner(s) currently exploring{" "}
-              <strong>{topic}</strong>. Connect and grow together!
-            </p>
+        {/* Progress Tracker */}
+        {parsedRoadmap.length > 0 && (
+          <Card
+            className="p-8 border-border bg-card mb-8 transition-all duration-300 cursor-pointer hover:shadow-lg"
+            onClick={() => setExpanded(!expanded)}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold mb-2">
+                  Overall Progress: {Math.round(progress)}%
+                </h3>
+                <Progress value={progress} className="h-3" />
+              </div>
+              {expanded ? (
+                <ChevronUp className="h-6 w-6 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-6 w-6 text-muted-foreground" />
+              )}
+            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {matchedPeers.map((peer) => (
-                <Card
-                  key={peer.id}
-                  className="p-4 border border-border/40 bg-background/60 hover:shadow-md transition rounded-xl"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-lg">{peer.name}</p>
-                      <p className="text-sm text-muted-foreground">{peer.city}</p>
-                      <div className="flex items-center text-xs text-muted-foreground mt-1 gap-1">
-                        <Mail className="h-3 w-3" /> {peer.email}
+            {expanded && (
+              <div className="mt-8 space-y-4 animate-fadeIn">
+                {parsedRoadmap.map((week, index) => (
+                  <div
+                    key={index}
+                    className="p-4 rounded-xl border border-border/40 bg-background/60"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold text-lg mb-1">
+                          Week {week.week}: {week.title}
+                        </h3>
+                        <ul className="list-disc ml-6 text-sm text-muted-foreground">
+                          {week.details.map((d, i) => (
+                            <li key={i}>{d}</li>
+                          ))}
+                        </ul>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Active {peer.lastActive}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="hover:bg-primary hover:text-white transition"
-                    >
-                      Connect
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </Card>
-        )}
 
-        {/* Roadmap Display */}
-        {roadmap && (
-          <Card className="p-8 border-border bg-card card-glow animate-fade-in">
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <CheckCircle2 className="h-6 w-6 text-primary" />
-              Your Personalized Roadmap
-            </h2>
-            <div className="prose prose-invert max-w-none space-y-3">
-              <ul className="list-disc list-inside space-y-2">
-                {formatRoadmap(roadmap)}
-              </ul>
-            </div>
+                      <div className="flex flex-col sm:flex-row gap-2 items-center mt-2 sm:mt-0">
+                        <Input
+                          placeholder="Add project link"
+                          value={week.projectLink}
+                          onChange={(e) =>
+                            handleProjectLinkChange(index, e.target.value)
+                          }
+                        />
+                        <Button
+                          variant={week.completed ? "success" : "outline"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleWeekCompletion(index);
+                          }}
+                        >
+                          {week.completed ? "Completed ✅" : "Mark Done"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         )}
       </div>
@@ -291,3 +256,4 @@ const RoadmapGenerator = () => {
 };
 
 export default RoadmapGenerator;
+  
