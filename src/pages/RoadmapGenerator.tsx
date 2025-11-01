@@ -4,39 +4,77 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Link } from "react-router-dom";
+import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft,
   Sparkles,
   Loader2,
+  CheckCircle2,
+  Users,
+  Mail,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+const dummyPeers = [
+  { id: 1, name: "Priya Sharma", city: "Mumbai", email: "priya.sharma@email.com", lastActive: "5 days ago", topic: "machine learning" },
+  { id: 2, name: "Rohan Mehta", city: "Delhi", email: "rohan.mehta@email.com", lastActive: "2 days ago", topic: "data science" },
+  { id: 3, name: "Ananya Verma", city: "Bangalore", email: "ananya.verma@email.com", lastActive: "1 day ago", topic: "machine learning" },
+  { id: 4, name: "Karan Patel", city: "Pune", email: "karan.patel@email.com", lastActive: "3 hours ago", topic: "web development" },
+];
+
 const RoadmapGenerator = () => {
   const [topic, setTopic] = useState("");
   const [currentKnowledge, setCurrentKnowledge] = useState("");
+  const [roadmap, setRoadmap] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [parsedRoadmap, setParsedRoadmap] = useState([]);
+  const [matchedPeers, setMatchedPeers] = useState([]);
+  const [weeks, setWeeks] = useState([]);
   const [progress, setProgress] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("roadmapProgress"));
-    if (saved) setParsedRoadmap(saved);
-  }, []);
+  const normalize = (text) =>
+    text.toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
 
   useEffect(() => {
-    if (parsedRoadmap.length > 0) {
-      localStorage.setItem("roadmapProgress", JSON.stringify(parsedRoadmap));
-      const completed = parsedRoadmap.filter((w) => w.completed).length;
-      setProgress((completed / parsedRoadmap.length) * 100);
+    if (!topic.trim()) {
+      setMatchedPeers([]);
+      return;
     }
-  }, [parsedRoadmap]);
+    const peers = dummyPeers.filter((peer) =>
+      normalize(peer.topic).includes(normalize(topic))
+    );
+    setMatchedPeers(peers);
+  }, [topic]);
+
+  const parseWeeks = (text) => {
+    const lines = text.split("\n");
+    const weeksArr = [];
+    let current = null;
+
+    lines.forEach((line) => {
+      const weekMatch = line.match(/week\s*(\d+):?\s*(.*)/i);
+      if (weekMatch) {
+        if (current) weeksArr.push(current);
+        current = {
+          week: weekMatch[1],
+          title: weekMatch[2] || "Untitled",
+          details: [],
+          completed: false,
+          project: "",
+        };
+      } else if (current && line.trim() !== "") {
+        current.details.push(line.trim());
+      }
+    });
+
+    if (current) weeksArr.push(current);
+    return weeksArr;
+  };
 
   const handleGenerate = async () => {
     if (!topic.trim()) {
@@ -49,7 +87,8 @@ const RoadmapGenerator = () => {
     }
 
     setIsLoading(true);
-    setParsedRoadmap([]);
+    setRoadmap("");
+    setWeeks([]);
 
     try {
       const { data, error } = await supabase.functions.invoke("generate-roadmap", {
@@ -66,11 +105,12 @@ const RoadmapGenerator = () => {
         return;
       }
 
-      const extracted = parseWeeks(data.roadmap);
-      setParsedRoadmap(extracted);
+      setRoadmap(data.roadmap);
+      const parsed = parseWeeks(data.roadmap);
+      setWeeks(parsed);
       toast({
         title: "Success!",
-        description: "Detailed roadmap generated successfully 🚀",
+        description: "Your personalized roadmap is ready with progress tracker 🚀",
       });
     } catch (error) {
       console.error("Error generating roadmap:", error);
@@ -84,42 +124,19 @@ const RoadmapGenerator = () => {
     }
   };
 
-  // Improved week parser that captures detailed weekly info
-  const parseWeeks = (text) => {
-    const lines = text.split("\n");
-    const weeks = [];
-    let currentWeek = null;
-
-    lines.forEach((line) => {
-      const weekMatch = line.match(/week\s*(\d+):?\s*(.*)/i);
-      if (weekMatch) {
-        if (currentWeek) weeks.push(currentWeek);
-        currentWeek = {
-          week: weekMatch[1],
-          title: weekMatch[2] || "Untitled",
-          details: [],
-          completed: false,
-          projectLink: "",
-        };
-      } else if (currentWeek && line.trim() !== "") {
-        currentWeek.details.push(line.trim());
-      }
-    });
-
-    if (currentWeek) weeks.push(currentWeek);
-    return weeks;
-  };
-
   const toggleWeekCompletion = (index) => {
-    setParsedRoadmap((prev) =>
-      prev.map((w, i) => (i === index ? { ...w, completed: !w.completed } : w))
+    const updated = weeks.map((w, i) =>
+      i === index ? { ...w, completed: !w.completed } : w
     );
+    setWeeks(updated);
+    const done = updated.filter((w) => w.completed).length;
+    setProgress((done / updated.length) * 100);
   };
 
-  const handleProjectLinkChange = (index, value) => {
-    setParsedRoadmap((prev) =>
-      prev.map((w, i) => (i === index ? { ...w, projectLink: value } : w))
-    );
+  const handleProjectChange = (index, value) => {
+    const updated = [...weeks];
+    updated[index].project = value;
+    setWeeks(updated);
   };
 
   const handleKeyPress = (e) => {
@@ -129,125 +146,190 @@ const RoadmapGenerator = () => {
     }
   };
 
+  const formatRoadmap = (text) => {
+    if (!text) return null;
+    const lines = text.split("\n").filter((line) => line.trim() !== "");
+    return lines.map((line, index) => {
+      const withLinks = line.replace(
+        /(https?:\/\/[^\s]+)/g,
+        (url) =>
+          `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-primary underline hover:text-primary/80">${url}</a>`
+      );
+
+      if (/month\s*\d+/i.test(line)) {
+        return (
+          <h3
+            key={index}
+            className="text-2xl font-semibold mt-6 mb-3 text-primary border-b border-border pb-1"
+            dangerouslySetInnerHTML={{ __html: withLinks }}
+          />
+        );
+      }
+
+      if (/^[-*•]/.test(line.trim())) {
+        return (
+          <li
+            key={index}
+            className="leading-relaxed text-muted-foreground ml-4"
+            dangerouslySetInnerHTML={{
+              __html: withLinks.replace(/^[-*•]\s*/, ""),
+            }}
+          />
+        );
+      }
+
+      return (
+        <p
+          key={index}
+          className="leading-relaxed text-muted-foreground"
+          dangerouslySetInnerHTML={{ __html: withLinks }}
+        />
+      );
+    });
+  };
+
   return (
-    <div className="min-h-screen pt-24 pb-12 px-4 bg-background">
-      <div className="container mx-auto max-w-5xl">
+    <div className="min-h-screen pt-24 pb-12 px-4">
+      <div className="container mx-auto max-w-4xl">
         <Link
           to="/"
-          className="text-sm text-muted-foreground hover:text-primary mb-6 inline-flex items-center gap-2"
+          className="text-sm text-muted-foreground hover:text-primary mb-6 inline-flex items-center gap-2 animate-fade-in"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to Home
+          <ArrowLeft className="h-4 w-4" />
+          Back to Home
         </Link>
 
-        <h1 className="text-5xl font-bold mb-4">
-          AI-Powered <span className="text-gradient">Roadmap Tracker</span>
-        </h1>
-        <p className="text-xl text-muted-foreground mb-6">
-          Generate a roadmap and track your weekly progress.
-        </p>
+        <div className="mb-8 animate-fade-in">
+          <h1 className="text-5xl font-bold mb-4">
+            AI-Powered <span className="text-gradient">Roadmap Generator</span>
+          </h1>
+          <p className="text-xl text-muted-foreground">
+            Get a structured roadmap + track progress every week!
+          </p>
+        </div>
 
         {/* Input Section */}
-        <Card className="p-8 border-border bg-card mb-8">
+        <Card className="p-8 border-border bg-card card-glow mb-8 animate-fade-in">
           <div className="space-y-6">
-            <div>
-              <Label>What do you want to learn?</Label>
+            <div className="space-y-2">
+              <Label htmlFor="topic">What do you want to learn?</Label>
               <Input
-                placeholder="e.g. Frontend Development, Machine Learning..."
+                id="topic"
+                placeholder="e.g., Frontend Development, AI, etc."
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 onKeyDown={handleKeyPress}
               />
             </div>
-            <div>
-              <Label>Your current knowledge (optional)</Label>
+
+            <div className="space-y-2">
+              <Label htmlFor="knowledge">What do you already know?</Label>
               <Textarea
-                placeholder="e.g. I know HTML/CSS basics..."
+                id="knowledge"
+                placeholder="e.g., HTML/CSS basics..."
                 value={currentKnowledge}
                 onChange={(e) => setCurrentKnowledge(e.target.value)}
                 onKeyDown={handleKeyPress}
               />
             </div>
-            <Button
-              onClick={handleGenerate}
-              disabled={isLoading}
-              size="lg"
-              className="w-full"
-            >
+
+            <Button onClick={handleGenerate} disabled={isLoading} size="lg" className="w-full">
               {isLoading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-4 w-4 mr-2" /> Generate Roadmap
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Generate Roadmap
                 </>
               )}
             </Button>
           </div>
         </Card>
 
-        {/* Progress Tracker */}
-        {parsedRoadmap.length > 0 && (
+        {/* Peers Section */}
+        {matchedPeers.length > 0 && (
+          <Card className="p-8 border-border bg-card card-glow mb-8 animate-fade-in">
+            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2 text-primary">
+              <Users className="h-5 w-5" /> Peers Learning {topic}
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {matchedPeers.map((peer) => (
+                <Card key={peer.id} className="p-4 border border-border/40 bg-background/60">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-lg">{peer.name}</p>
+                      <p className="text-sm text-muted-foreground">{peer.city}</p>
+                      <div className="flex items-center text-xs text-muted-foreground mt-1 gap-1">
+                        <Mail className="h-3 w-3" /> {peer.email}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline">Connect</Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* Progress Tracker Card */}
+        {weeks.length > 0 && (
           <Card
-            className="p-8 border-border bg-card mb-8 transition-all duration-300 cursor-pointer hover:shadow-lg"
+            className="p-6 border-border bg-card card-glow mb-8 cursor-pointer transition-all"
             onClick={() => setExpanded(!expanded)}
           >
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold mb-2">
-                  Overall Progress: {Math.round(progress)}%
-                </h3>
-                <Progress value={progress} className="h-3" />
+                <h3 className="text-lg font-semibold">Overall Progress: {Math.round(progress)}%</h3>
+                <Progress value={progress} className="h-3 mt-2" />
               </div>
-              {expanded ? (
-                <ChevronUp className="h-6 w-6 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-6 w-6 text-muted-foreground" />
-              )}
+              {expanded ? <ChevronUp /> : <ChevronDown />}
             </div>
 
             {expanded && (
-              <div className="mt-8 space-y-4 animate-fadeIn">
-                {parsedRoadmap.map((week, index) => (
-                  <div
-                    key={index}
-                    className="p-4 rounded-xl border border-border/40 bg-background/60"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                      <div>
-                        <h3 className="font-semibold text-lg mb-1">
-                          Week {week.week}: {week.title}
-                        </h3>
-                        <ul className="list-disc ml-6 text-sm text-muted-foreground">
-                          {week.details.map((d, i) => (
-                            <li key={i}>{d}</li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row gap-2 items-center mt-2 sm:mt-0">
-                        <Input
-                          placeholder="Add project link"
-                          value={week.projectLink}
-                          onChange={(e) =>
-                            handleProjectLinkChange(index, e.target.value)
-                          }
-                        />
-                        <Button
-                          variant={week.completed ? "success" : "outline"}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleWeekCompletion(index);
-                          }}
-                        >
-                          {week.completed ? "Completed ✅" : "Mark Done"}
-                        </Button>
-                      </div>
+              <div className="mt-6 space-y-4">
+                {weeks.map((w, i) => (
+                  <div key={i} className="p-4 border border-border/50 rounded-xl bg-background/70">
+                    <h4 className="font-semibold mb-2">Week {w.week}: {w.title}</h4>
+                    <ul className="ml-6 text-sm text-muted-foreground list-disc">
+                      {w.details.map((d, j) => <li key={j}>{d}</li>)}
+                    </ul>
+                    <div className="mt-3 flex flex-col sm:flex-row items-center gap-3">
+                      <Input
+                        placeholder="Add project link"
+                        value={w.project}
+                        onChange={(e) => handleProjectChange(i, e.target.value)}
+                      />
+                      <Button
+                        variant={w.completed ? "default" : "outline"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleWeekCompletion(i);
+                        }}
+                      >
+                        {w.completed ? "✅ Done" : "Mark Done"}
+                      </Button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+          </Card>
+        )}
+
+        {/* Original AI Roadmap Display */}
+        {roadmap && (
+          <Card className="p-8 border-border bg-card card-glow animate-fade-in">
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+              <CheckCircle2 className="h-6 w-6 text-primary" /> Full Roadmap
+            </h2>
+            <div className="prose prose-invert max-w-none space-y-3">
+              <ul className="list-disc list-inside space-y-2">
+                {formatRoadmap(roadmap)}
+              </ul>
+            </div>
           </Card>
         )}
       </div>
@@ -256,4 +338,3 @@ const RoadmapGenerator = () => {
 };
 
 export default RoadmapGenerator;
-  

@@ -12,6 +12,8 @@ import Companies from "./pages/Companies";
 import NotFound from "./pages/NotFound";
 import LoginPage from "./pages/Loginpage";
 
+
+
 const queryClient = new QueryClient();
 
 const App = () => {
@@ -31,6 +33,8 @@ const App = () => {
             {/* Catch-all route */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+
+          
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
@@ -38,4 +42,3 @@ const App = () => {
 };
 
 export default App;
- 
